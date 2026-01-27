@@ -1,0 +1,168 @@
+name: Build Guardias Pro APK (Release)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip rsync
+
+      - name: Unzip patch (v4)
+        run: |
+          ls -la
+          mkdir -p /tmp/patch
+          unzip -o GuardiasPro_Patch_Premium_v4.zip -d /tmp/patch
+          echo "---- PATCH CONTENT ----"
+          ls -la /tmp/patch
+
+      - name: Create Flutter project
+        run: |
+          flutter create guardias_pro
+          rsync -av /tmp/patch/ guardias_pro/
+
+      - name: Pub get
+        working-directory: guardias_pro
+        run: flutter pub get
+
+      # ✅ FIX DEFINITIVO: Reemplaza build.gradle(.kts) por uno correcto + desugaring
+      - name: Fix Android app Gradle (desugaring + clean template)
+        working-directory: guardias_pro/android/app
+        run: |
+          echo "---- android/app files ----"
+          ls -la
+
+          if [ -f "build.gradle.kts" ]; then
+            echo "Using build.gradle.kts (Kotlin DSL)"
+            cat > build.gradle.kts <<'KTS'
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.guardias_pro"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+        isCoreLibraryDesugaringEnabled = true
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
+    }
+
+    defaultConfig {
+        applicationId = "com.example.guardias_pro"
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // Sin firma propia: usamos debug signing para que compile release sin keystore
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+}
+KTS
+          elif [ -f "build.gradle" ]; then
+            echo "Using build.gradle (Groovy)"
+            cat > build.gradle <<'GRADLE'
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace "com.example.guardias_pro"
+    compileSdk flutter.compileSdkVersion
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+
+    defaultConfig {
+        applicationId "com.example.guardias_pro"
+        minSdk flutter.minSdkVersion
+        targetSdk flutter.targetSdkVersion
+        versionCode flutter.versionCode
+        versionName flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // Sin firma propia: usamos debug signing para que compile release sin keystore
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+}
+GRADLE
+          else
+            echo "ERROR: No build.gradle or build.gradle.kts found in android/app"
+            exit 1
+          fi
+
+          echo "---- Gradle file final (first 120 lines) ----"
+          if [ -f "build.gradle.kts" ]; then sed -n '1,120p' build.gradle.kts; fi
+          if [ -f "build.gradle" ]; then sed -n '1,120p' build.gradle; fi
+
+      - name: Build APK (release)
+        working-directory: guardias_pro
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GuardiasPro-APK
+          path: guardias_pro/build/app/outputs/flutter-apk/app-release.apk
