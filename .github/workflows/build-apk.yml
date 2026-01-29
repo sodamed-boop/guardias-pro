@@ -32,7 +32,7 @@ jobs:
         run: |
           ls -la
           mkdir -p /tmp/patch
-          unzip -o GuardiasPro_Patch_Premium_v9.zip -d /tmp/patch
+          unzip -o GuardiasPro_Patch_Premium_v10.zip -d /tmp/patch
           echo "---- PATCH CONTENT ----"
           ls -la /tmp/patch
 
