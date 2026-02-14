@@ -1,4 +1,4 @@
-name: Build Guardias Pro APK (Release)
+name: Build APK (release)
 
 on:
   workflow_dispatch:
@@ -11,161 +11,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
 
-      - name: Install tools
+      - name: Create Android project (no Windows installs)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip rsync
+          mkdir -p _build
+          cd _build
+          flutter create . --platforms=android --org com.mauro.guardiaspro --project-name guardias_pro
+          rm -rf lib
+          cp -r ../lib ./lib
+          cp ../pubspec.yaml ./pubspec.yaml
+          flutter pub get
 
-      - name: Unzip patch (v4)
+      - name: Build APK Release
         run: |
-          ls -la
-          mkdir -p /tmp/patch
-          unzip -o GuardiasPro_Patch_Premium_v12.zip -d /tmp/patch
-          echo "---- PATCH CONTENT ----"
-          ls -la /tmp/patch
-
-      - name: Create Flutter project
-        run: |
-          flutter create guardias_pro
-          rsync -av /tmp/patch/ guardias_pro/
-
-      - name: Pub get
-        working-directory: guardias_pro
-        run: flutter pub get
-
-      # ✅ FIX DEFINITIVO: re-escribe build.gradle(.kts) con desugaring (sin heredocs)
-      - name: Fix Android app Gradle (desugaring)
-        working-directory: guardias_pro/android/app
-        run: |
-          ls -la
-          python3 - <<'PY'
-          from pathlib import Path
-
-          gradle = Path("build.gradle")
-          kts = Path("build.gradle.kts")
-
-          groovy_content = """plugins {
-              id "com.android.application"
-              id "kotlin-android"
-              id "dev.flutter.flutter-gradle-plugin"
-          }
-
-          android {
-              namespace "com.example.guardias_pro"
-              compileSdk flutter.compileSdkVersion
-              ndkVersion flutter.ndkVersion
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_1_8
-                  targetCompatibility JavaVersion.VERSION_1_8
-                  coreLibraryDesugaringEnabled true
-              }
-
-              kotlinOptions {
-                  jvmTarget = "1.8"
-              }
-
-              defaultConfig {
-                  applicationId "com.example.guardias_pro"
-                  minSdk flutter.minSdkVersion
-                  targetSdk flutter.targetSdkVersion
-                  versionCode flutter.versionCode
-                  versionName flutter.versionName
-              }
-
-              buildTypes {
-                  release {
-                      // Sin firma propia: permite compilar release
-                      signingConfig signingConfigs.debug
-                  }
-              }
-          }
-
-          flutter {
-              source "../.."
-          }
-
-          dependencies {
-              coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
-          }
-          """
-
-          kts_content = """plugins {
-              id("com.android.application")
-              id("kotlin-android")
-              id("dev.flutter.flutter-gradle-plugin")
-          }
-
-          android {
-              namespace = "com.example.guardias_pro"
-              compileSdk = flutter.compileSdkVersion
-              ndkVersion = flutter.ndkVersion
-
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_1_8
-                  targetCompatibility = JavaVersion.VERSION_1_8
-                  isCoreLibraryDesugaringEnabled = true
-              }
-
-              kotlinOptions {
-                  jvmTarget = JavaVersion.VERSION_1_8.toString()
-              }
-
-              defaultConfig {
-                  applicationId = "com.example.guardias_pro"
-                  minSdk = flutter.minSdkVersion
-                  targetSdk = flutter.targetSdkVersion
-                  versionCode = flutter.versionCode
-                  versionName = flutter.versionName
-              }
-
-              buildTypes {
-                  getByName("release") {
-                      // Sin firma propia: permite compilar release
-                      signingConfig = signingConfigs.getByName("debug")
-                  }
-              }
-          }
-
-          flutter {
-              source = "../.."
-          }
-
-          dependencies {
-              coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
-          }
-          """
-
-          if kts.exists():
-              kts.write_text(kts_content, encoding="utf-8")
-              print("✅ Wrote build.gradle.kts")
-          elif gradle.exists():
-              gradle.write_text(groovy_content, encoding="utf-8")
-              print("✅ Wrote build.gradle")
-          else:
-              # Si no existe ninguno, creamos el KTS por defecto (Flutter nuevo)
-              kts.write_text(kts_content, encoding="utf-8")
-              print("✅ Created build.gradle.kts")
-          PY
-
-      - name: Build APK (release)
-        working-directory: guardias_pro
-        run: flutter build apk --release
+          cd _build
+          flutter build apk --release
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: GuardiasPro-APK
-          path: guardias_pro/build/app/outputs/flutter-apk/app-release.apk
+          path: _build/build/app/outputs/flutter-apk/app-release.apk
