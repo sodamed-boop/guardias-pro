@@ -18,12 +18,28 @@ jobs:
 
       - name: Create Android project (no Windows installs)
         run: |
+          echo "== ROOT FILES =="
+          ls -la
+
+          if [ ! -f "pubspec.yaml" ]; then
+            echo "ERROR: pubspec.yaml NO existe en la raiz del repo."
+            echo "Solucion: subilo a la raiz (Branch v2)."
+            exit 1
+          fi
+
+          if [ ! -d "lib" ]; then
+            echo "ERROR: carpeta lib/ NO existe en la raiz del repo."
+            exit 1
+          fi
+
           mkdir -p _build
           cd _build
           flutter create . --platforms=android --org com.mauro.guardiaspro --project-name guardias_pro
+
           rm -rf lib
           cp -r ../lib ./lib
           cp ../pubspec.yaml ./pubspec.yaml
+
           flutter pub get
 
       - name: Build APK Release
