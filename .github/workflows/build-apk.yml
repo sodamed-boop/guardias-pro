@@ -16,14 +16,13 @@ jobs:
         with:
           channel: stable
 
-      - name: Create Android project (no Windows installs)
+           - name: Create Android project (no Windows installs)
         run: |
           echo "== ROOT FILES =="
           ls -la
 
           if [ ! -f "pubspec.yaml" ]; then
             echo "ERROR: pubspec.yaml NO existe en la raiz del repo."
-            echo "Solucion: subilo a la raiz (Branch v2)."
             exit 1
           fi
 
@@ -39,6 +38,39 @@ jobs:
           rm -rf lib
           cp -r ../lib ./lib
           cp ../pubspec.yaml ./pubspec.yaml
+
+          echo "== Enable core library desugaring (fix flutter_local_notifications) =="
+
+          # 1) Agrega dependencia desugar_jdk_libs en android/app/build.gradle
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/build.gradle")
+          s = p.read_text(encoding="utf-8")
+
+          if "desugar_jdk_libs" not in s:
+              s = s.replace(
+                  "dependencies {",
+                  "dependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'"
+              )
+
+          # 2) Activa compileOptions con desugaring en android { ... }
+          if "coreLibraryDesugaringEnabled true" not in s:
+              if "compileOptions {" in s:
+                  # si ya existe, lo ampliamos
+                  s = s.replace(
+                      "compileOptions {",
+                      "compileOptions {\n            coreLibraryDesugaringEnabled true"
+                  )
+              else:
+                  # lo insertamos dentro del bloque android { ... }
+                  s = s.replace(
+                      "android {",
+                      "android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n        coreLibraryDesugaringEnabled true\n    }\n"
+                  )
+
+          p.write_text(s, encoding="utf-8")
+          print("Patched:", p)
+          PY
 
           flutter pub get
 
