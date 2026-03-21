@@ -16,7 +16,7 @@ jobs:
         with:
           channel: stable
 
-           - name: Create Android project (no Windows installs)
+      - name: Create Android project (no Windows installs)
         run: |
           echo "== ROOT FILES =="
           ls -la
