@@ -39,39 +39,67 @@ jobs:
           cp -r ../lib ./lib
           cp ../pubspec.yaml ./pubspec.yaml
 
-          echo "== Enable core library desugaring (fix flutter_local_notifications) =="
+                    echo "== Enable core library desugaring (fix flutter_local_notifications) =="
 
-          # 1) Agrega dependencia desugar_jdk_libs en android/app/build.gradle
           python3 - <<'PY'
           from pathlib import Path
-          p = Path("android/app/build.gradle")
-          s = p.read_text(encoding="utf-8")
 
-          if "desugar_jdk_libs" not in s:
-              s = s.replace(
-                  "dependencies {",
-                  "dependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'"
-              )
+          gradle_groovy = Path("android/app/build.gradle")
+          gradle_kts = Path("android/app/build.gradle.kts")
 
-          # 2) Activa compileOptions con desugaring en android { ... }
-          if "coreLibraryDesugaringEnabled true" not in s:
-              if "compileOptions {" in s:
-                  # si ya existe, lo ampliamos
+          if gradle_groovy.exists():
+              p = gradle_groovy
+              s = p.read_text(encoding="utf-8")
+
+              if "desugar_jdk_libs" not in s:
                   s = s.replace(
-                      "compileOptions {",
-                      "compileOptions {\n            coreLibraryDesugaringEnabled true"
-                  )
-              else:
-                  # lo insertamos dentro del bloque android { ... }
-                  s = s.replace(
-                      "android {",
-                      "android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n        coreLibraryDesugaringEnabled true\n    }\n"
+                      "dependencies {",
+                      "dependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'"
                   )
 
-          p.write_text(s, encoding="utf-8")
-          print("Patched:", p)
+              if "coreLibraryDesugaringEnabled true" not in s:
+                  if "compileOptions {" in s:
+                      s = s.replace(
+                          "compileOptions {",
+                          "compileOptions {\n        coreLibraryDesugaringEnabled true"
+                      )
+                  else:
+                      s = s.replace(
+                          "android {",
+                          "android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_1_8\n        targetCompatibility JavaVersion.VERSION_1_8\n        coreLibraryDesugaringEnabled true\n    }\n"
+                      )
+
+              p.write_text(s, encoding="utf-8")
+              print("Patched Groovy gradle:", p)
+
+          elif gradle_kts.exists():
+              p = gradle_kts
+              s = p.read_text(encoding="utf-8")
+
+              if "desugar_jdk_libs" not in s:
+                  s = s.replace(
+                      "dependencies {",
+                      'dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")'
+                  )
+
+              if "isCoreLibraryDesugaringEnabled = true" not in s:
+                  if "compileOptions {" in s:
+                      s = s.replace(
+                          "compileOptions {",
+                          "compileOptions {\n        isCoreLibraryDesugaringEnabled = true"
+                      )
+                  else:
+                      s = s.replace(
+                          "android {",
+                          "android {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_1_8\n        targetCompatibility = JavaVersion.VERSION_1_8\n        isCoreLibraryDesugaringEnabled = true\n    }\n"
+                      )
+
+              p.write_text(s, encoding="utf-8")
+              print("Patched Kotlin gradle:", p)
+
+          else:
+              raise FileNotFoundError("No existe ni android/app/build.gradle ni android/app/build.gradle.kts")
           PY
-
           flutter pub get
 
       - name: Build APK Release
